@@ -256,6 +256,7 @@
       </select>
       <input type="file" id="sampleFile" accept="audio/*" style="display:none;">
     </div>
+    <div id="soundStatus" class="fxlabel" style="margin-top:-6px;margin-bottom:10px;min-height:14px;"></div>
 
     <div class="grid2">
       <div>
@@ -549,9 +550,11 @@ loadSamplesFolder();
 function ensureFolderSample(filename){
   if(sampleBuffers[filename])return Promise.resolve(sampleBuffers[filename]);
   return new Promise((resolve,reject)=>{
-    const player=new Tone.Player('samples/'+filename,()=>{resolve(player);}).connect(delay);
-    player.onerror=reject;
-    sampleBuffers[filename]=player;
+    const player=new Tone.Player({
+      url:'samples/'+filename,
+      onload:()=>{sampleBuffers[filename]=player;resolve(player);},
+      onerror:(err)=>{reject(err);}
+    }).connect(delay);
   });
 }
 
@@ -576,19 +579,38 @@ buildSynth('Lead');
 
 document.getElementById('soundSel').addEventListener('change',(e)=>{
   const val=e.target.value;
+  const status=document.getElementById('soundStatus');
+  status.textContent='';
   if(val==='sample'){document.getElementById('sampleFile').click();return;}
   if(val.startsWith('folder:')){
     const filename=val.slice(7);
-    ensureFolderSample(filename).then(player=>{sampler=player;}).catch(()=>{});
+    status.textContent='Caricamento '+filename+'...';
+    status.style.color='var(--text-dim)';
+    ensureFolderSample(filename).then(player=>{
+      sampler=player;
+      status.textContent='Caricato: '+filename;
+      status.style.color='var(--green)';
+    }).catch((err)=>{
+      status.textContent='Errore caricando '+filename+' — controlla formato/percorso';
+      status.style.color='var(--red)';
+      console.error('Errore caricamento sample',filename,err);
+    });
     return;
   }
   buildSynth(val);
 });
 document.getElementById('sampleFile').addEventListener('change',(e)=>{
   const file=e.target.files[0];if(!file)return;
+  const status=document.getElementById('soundStatus');
+  status.textContent='Caricamento '+file.name+'...';
+  status.style.color='var(--text-dim)';
   const url=URL.createObjectURL(file);
   if(sampler)sampler.dispose();
-  sampler=new Tone.Player(url).connect(delay);
+  sampler=new Tone.Player({
+    url:url,
+    onload:()=>{status.textContent='Caricato: '+file.name;status.style.color='var(--green)';},
+    onerror:(err)=>{status.textContent='Errore caricando il file — formato non supportato';status.style.color='var(--red)';console.error('Errore caricamento sample',err);}
+  }).connect(delay);
   const opt=document.querySelector('#soundSel option[value="sample"]');
   opt.textContent=file.name.length>16?file.name.slice(0,14)+'...':file.name;
   opt.selected=true;
