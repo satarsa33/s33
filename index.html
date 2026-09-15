@@ -547,15 +547,30 @@ function loadSamplesFolder(){
   }).catch(()=>{});
 }
 loadSamplesFolder();
-function ensureFolderSample(filename){
-  if(sampleBuffers[filename])return Promise.resolve(sampleBuffers[filename]);
-  return new Promise((resolve,reject)=>{
-    const player=new Tone.Player({
-      url:'samples/'+filename,
-      onload:()=>{sampleBuffers[filename]=player;resolve(player);},
-      onerror:(err)=>{reject(err);}
-    }).connect(delay);
-  });
+async function ensureFolderSample(filename){
+  if(sampleBuffers[filename])return sampleBuffers[filename];
+  const url='samples/'+encodeURIComponent(filename);
+  let resp;
+  try{
+    resp=await fetch(url);
+  }catch(networkErr){
+    throw new Error('percorso non raggiungibile (probabile apertura come file locale invece che hosting)');
+  }
+  if(!resp.ok){
+    throw new Error('file non trovato (HTTP '+resp.status+') — controlla il nome esatto in samples.json');
+  }
+  const arr=await resp.arrayBuffer();
+  const ctx=Tone.getContext().rawContext;
+  let audioBuf;
+  try{
+    audioBuf=await new Promise((res,rej)=>ctx.decodeAudioData(arr.slice(0),res,rej));
+  }catch(decodeErr){
+    throw new Error('formato WAV non supportato dal browser (riesporta come PCM 16-bit)');
+  }
+  const player=new Tone.Player().connect(delay);
+  player.buffer=new Tone.ToneAudioBuffer(audioBuf);
+  sampleBuffers[filename]=player;
+  return player;
 }
 
 function buildSynth(name){
@@ -591,7 +606,7 @@ document.getElementById('soundSel').addEventListener('change',(e)=>{
       status.textContent='Caricato: '+filename;
       status.style.color='var(--green)';
     }).catch((err)=>{
-      status.textContent='Errore caricando '+filename+' — controlla formato/percorso';
+      status.textContent='Errore: '+(err&&err.message?err.message:'controlla formato/percorso');
       status.style.color='var(--red)';
       console.error('Errore caricamento sample',filename,err);
     });
