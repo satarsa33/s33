@@ -78,6 +78,32 @@
   .fader .fill{position:absolute;bottom:0;left:0;right:0;}
   .faderwrap{height:100%;}
 
+  .pitchgrid{
+    position:relative;height:100%;border-radius:5px;touch-action:none;
+    border:1px solid var(--line-dark);
+    background-color:var(--panel2);
+    background-image:repeating-linear-gradient(to top, var(--line-dark) 0, var(--line-dark) 1px, transparent 1px, transparent calc(100%/23));
+  }
+  .pitchMarker{
+    position:absolute;left:50%;width:14px;height:14px;border-radius:3px;
+    background:var(--blue);transform:translate(-50%,50%);
+    bottom:0;transition:bottom 0.15s ease, opacity 0.15s ease;
+  }
+  @keyframes pitchFlash{
+    0%{opacity:1;transform:translate(-50%,50%) scale(1);}
+    18%{opacity:0.15;transform:translate(-50%,50%) scale(0.35);}
+    100%{opacity:1;transform:translate(-50%,50%) scale(1);}
+  }
+  .pitchMarker.flash{animation:pitchFlash 0.32s ease;}
+
+  .fxcard .grid2{margin-bottom:12px;}
+  .fxlabel{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);margin-bottom:3px;}
+  input[type=range]{width:100%;}
+  .sessionsrow{display:flex;gap:8px;margin-bottom:8px;}
+  .sessionsrow select{flex:1;}
+  .sessionsrow2{display:flex;gap:8px;}
+  .sessionsrow2 input[type=text]{flex:1;height:36px;border-radius:8px;border:1px solid var(--line-dark);background:var(--panel);color:var(--text);padding:0 8px;font-size:14px;}
+
   .minibtn{
     width:24px;height:24px;padding:0;border-radius:6px;border:1px solid var(--line-dark);
     background:var(--panel2);color:var(--text-dim);font-size:12px;display:flex;align-items:center;justify-content:center;
@@ -243,6 +269,37 @@
     </div>
   </section>
 
+  <section class="card fxcard">
+    <div class="label">FX</div>
+    <div class="grid2">
+      <div>
+        <div class="fxlabel"><span>Delay mix</span><span id="delayWetVal">15%</span></div>
+        <input type="range" id="delayWet" min="0" max="100" value="15">
+        <div class="fxlabel" style="margin-top:8px;"><span>Delay feedback</span><span id="delayFbVal">18%</span></div>
+        <input type="range" id="delayFb" min="0" max="90" value="18">
+      </div>
+      <div>
+        <div class="fxlabel"><span>Reverb mix</span><span id="reverbWetVal">12%</span></div>
+        <input type="range" id="reverbWet" min="0" max="100" value="12">
+        <div class="fxlabel" style="margin-top:8px;"><span>Reverb decay</span><span id="reverbDecayVal">1.6s</span></div>
+        <input type="range" id="reverbDecay" min="1" max="40" value="16">
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="label">SESSIONS</div>
+    <div class="sessionsrow">
+      <select id="sessionSel"><option value="">— nessuna sessione salvata —</option></select>
+      <button class="btn" id="loadSession">Carica</button>
+      <button class="btn" id="deleteSession">Elim.</button>
+    </div>
+    <div class="sessionsrow2">
+      <input type="text" id="sessionName" placeholder="Nome sessione">
+      <button class="btn" id="saveSession">Salva</button>
+    </div>
+  </section>
+
   <div class="transport">
     <button class="transportbtn" id="playBtn" aria-label="Play">&#9654;</button>
     <button class="transportbtn" id="stopBtn" aria-label="Stop">&#9632;</button>
@@ -338,16 +395,47 @@ function renderProb(){
     c.appendChild(box);
   });
 }
+const pitchMarkers=[];
 function renderPitch(){
   const c=document.getElementById('pitchCells');c.innerHTML='';
   const lab=document.getElementById('pitchLabels');lab.innerHTML='';
+  pitchMarkers.length=0;
   state.pitch.forEach((v,i)=>{
     const box=el('div');box.style.height='110px';
+    const grid=el('div','pitchgrid');
+    const marker=el('div','pitchMarker');
     const noteLabel=el('div','notelabel',NOTES[v]);
-    makeFader(box,state.pitch,i,NOTES.length-1,'var(--blue)',0,()=>{noteLabel.textContent=NOTES[state.pitch[i]];});
+    function place(val){marker.style.bottom=(val/(NOTES.length-1)*100)+'%';}
+    place(v);
+    function setFromY(clientY){
+      const rect=grid.getBoundingClientRect();
+      let ratio=1-((clientY-rect.top)/rect.height);
+      ratio=Math.max(0,Math.min(1,ratio));
+      const val=Math.round(ratio*(NOTES.length-1));
+      state.pitch[i]=val;
+      place(val);
+      noteLabel.textContent=NOTES[val];
+    }
+    grid.addEventListener('pointerdown',e=>{
+      grid.setPointerCapture(e.pointerId);
+      setFromY(e.clientY);
+      grid.addEventListener('pointermove',mv);
+    });
+    function mv(e){setFromY(e.clientY);}
+    grid.addEventListener('pointerup',()=>grid.removeEventListener('pointermove',mv));
+    grid.appendChild(marker);
+    box.appendChild(grid);
     c.appendChild(box);
     lab.appendChild(noteLabel);
+    pitchMarkers[i]=marker;
   });
+}
+function flashPitch(i){
+  const m=pitchMarkers[i];
+  if(!m)return;
+  m.classList.remove('flash');
+  void m.offsetWidth;
+  m.classList.add('flash');
 }
 function renderVel(){
   const c=document.getElementById('velCells');c.innerHTML='';
@@ -501,6 +589,7 @@ new Tone.Sequence((time,i)=>{
     }
     lastFreq=Tone.Frequency(freq).toFrequency();
   }
+  Tone.Draw.schedule(()=>{flashPitch(idx);},time);
 },[0,1,2,3,4,5,6,7],'8n').start(0);
 
 let playing=false;
@@ -529,6 +618,106 @@ document.getElementById('regenSel').addEventListener('change',(e)=>{
   if(e.target.value!=='off'){
     regenEvent=Tone.Transport.scheduleRepeat(()=>{randomizePitch();},e.target.value);
   }
+});
+
+document.getElementById('delayWet').addEventListener('input',(e)=>{
+  const v=parseInt(e.target.value);delay.wet.value=v/100;
+  document.getElementById('delayWetVal').textContent=v+'%';
+});
+document.getElementById('delayFb').addEventListener('input',(e)=>{
+  const v=parseInt(e.target.value);delay.feedback.value=v/100;
+  document.getElementById('delayFbVal').textContent=v+'%';
+});
+document.getElementById('reverbWet').addEventListener('input',(e)=>{
+  const v=parseInt(e.target.value);reverb.wet.value=v/100;
+  document.getElementById('reverbWetVal').textContent=v+'%';
+});
+document.getElementById('reverbDecay').addEventListener('input',(e)=>{
+  const v=parseInt(e.target.value)/10;
+  reverb.decay=v;reverb.generate();
+  document.getElementById('reverbDecayVal').textContent=v.toFixed(1)+'s';
+});
+
+const SESS_KEY='s33-sessions';
+function loadSessionList(){
+  const sel=document.getElementById('sessionSel');
+  sel.innerHTML='<option value="">— nessuna sessione salvata —</option>';
+  const sessions=JSON.parse(localStorage.getItem(SESS_KEY)||'[]');
+  sessions.forEach((s,i)=>{
+    const opt=el('option','',s.name);
+    opt.value=i;
+    sel.appendChild(opt);
+  });
+  return sessions;
+}
+loadSessionList();
+
+document.getElementById('saveSession').addEventListener('click',()=>{
+  const name=document.getElementById('sessionName').value.trim();
+  if(!name)return;
+  const sessions=JSON.parse(localStorage.getItem(SESS_KEY)||'[]');
+  const snapshot={
+    name,
+    onoff:[...state.onoff],prob:[...state.prob],pitch:[...state.pitch],
+    vel:[...state.vel],oct:[...state.oct],slide:[...state.slide],
+    mode:currentMode,
+    scale:document.getElementById('genSel').value,
+    sound:document.getElementById('soundSel').value==='sample'?'Lead':document.getElementById('soundSel').value,
+    bpm:parseInt(document.getElementById('bpmInput').value),
+    regen:document.getElementById('regenSel').value,
+    delayWet:parseInt(document.getElementById('delayWet').value),
+    delayFb:parseInt(document.getElementById('delayFb').value),
+    reverbWet:parseInt(document.getElementById('reverbWet').value),
+    reverbDecay:parseInt(document.getElementById('reverbDecay').value)
+  };
+  const existingIdx=sessions.findIndex(s=>s.name===name);
+  if(existingIdx>=0)sessions[existingIdx]=snapshot;else sessions.push(snapshot);
+  localStorage.setItem(SESS_KEY,JSON.stringify(sessions));
+  document.getElementById('sessionName').value='';
+  loadSessionList();
+});
+
+document.getElementById('loadSession').addEventListener('click',()=>{
+  const sel=document.getElementById('sessionSel');
+  if(sel.value==='')return;
+  const sessions=JSON.parse(localStorage.getItem(SESS_KEY)||'[]');
+  const s=sessions[parseInt(sel.value)];
+  if(!s)return;
+  state.onoff=[...s.onoff];state.prob=[...s.prob];state.pitch=[...s.pitch];
+  state.vel=[...s.vel];state.oct=[...s.oct];state.slide=[...s.slide];
+  renderOnoff();renderProb();renderPitch();renderVel();renderOct();renderSlide();
+
+  document.querySelectorAll('.modebtn').forEach(x=>x.classList.remove('active'));
+  const mbtn=document.querySelector('.modebtn[data-mode="'+s.mode+'"]');
+  if(mbtn)mbtn.classList.add('active');
+  currentMode=s.mode;pingpongDir=1;pingpongPos=0;
+
+  document.getElementById('genSel').value=s.scale;
+  document.getElementById('soundSel').value=s.sound;
+  buildSynth(s.sound);
+  document.getElementById('bpmInput').value=s.bpm;
+  Tone.Transport.bpm.value=s.bpm;
+  document.getElementById('regenSel').value=s.regen;
+  document.getElementById('regenSel').dispatchEvent(new Event('change'));
+
+  document.getElementById('delayWet').value=s.delayWet;delay.wet.value=s.delayWet/100;
+  document.getElementById('delayWetVal').textContent=s.delayWet+'%';
+  document.getElementById('delayFb').value=s.delayFb;delay.feedback.value=s.delayFb/100;
+  document.getElementById('delayFbVal').textContent=s.delayFb+'%';
+  document.getElementById('reverbWet').value=s.reverbWet;reverb.wet.value=s.reverbWet/100;
+  document.getElementById('reverbWetVal').textContent=s.reverbWet+'%';
+  document.getElementById('reverbDecay').value=s.reverbDecay;
+  reverb.decay=s.reverbDecay/10;reverb.generate();
+  document.getElementById('reverbDecayVal').textContent=(s.reverbDecay/10).toFixed(1)+'s';
+});
+
+document.getElementById('deleteSession').addEventListener('click',()=>{
+  const sel=document.getElementById('sessionSel');
+  if(sel.value==='')return;
+  const sessions=JSON.parse(localStorage.getItem(SESS_KEY)||'[]');
+  sessions.splice(parseInt(sel.value),1);
+  localStorage.setItem(SESS_KEY,JSON.stringify(sessions));
+  loadSessionList();
 });
 
 if('serviceWorker' in navigator){
