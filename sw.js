@@ -1,4 +1,4 @@
-const CACHE = "s33-v2";
+const CACHE = "s33-v3";
 const FILES = ["./index.html", "./manifest.json", "./icon.svg", "./samples/samples.json"];
 
 self.addEventListener("install", (e) => {
