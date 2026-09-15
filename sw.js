@@ -1,5 +1,5 @@
-const CACHE = "s33-v1";
-const FILES = ["./index.html", "./manifest.json", "./icon.svg"];
+const CACHE = "s33-v2";
+const FILES = ["./index.html", "./manifest.json", "./icon.svg", "./samples/samples.json"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
