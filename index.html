@@ -100,6 +100,13 @@
   .fxcard .grid2{margin-bottom:12px;}
   .fxlabel{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);margin-bottom:3px;}
   input[type=range]{width:100%;}
+  .fxgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .fxgrp{text-align:center;}
+  .fxgrp h4{margin:0 0 6px;font-size:10px;letter-spacing:2px;color:var(--text-dim);font-weight:700;}
+  .knob{touch-action:none;-webkit-user-select:none;user-select:none;cursor:ns-resize;margin-bottom:10px;}
+  .knob svg{width:68px;height:68px;display:block;margin:0 auto;}
+  .kl{font-size:10px;color:var(--text-dim);margin-top:1px;}
+  .kl span+span{color:var(--text);margin-left:3px;}
   .sessionsrow{display:flex;gap:8px;margin-bottom:8px;}
   .sessionsrow select{flex:1;}
   .sessionsrow2{display:flex;gap:8px;}
@@ -252,7 +259,12 @@
       <select id="soundSel">
         <option>Lead</option><option>Pluck</option><option>Bass</option><option>Bell</option>
         <option>Arp</option><option>Square</option><option>Saw</option><option>Pluck 2</option>
-        <option>FM</option><option>Chip</option><option value="sample">Load sample...</option>
+        <option>FM</option><option>Chip</option>
+        <optgroup label="Moog">
+        <option>Moog Bass</option><option>Fat Bass</option><option>Acid Squelch</option><option>Moog Lead</option>
+        <option>Moog Pluck</option><option>Square Pulse</option><option>Hard Lead</option><option>Soft Key</option>
+        </optgroup>
+        <option value="sample">Load sample...</option>
       </select>
       <input type="file" id="sampleFile" accept="audio/*" style="display:none;">
     </div>
@@ -273,18 +285,18 @@
 
   <section class="card fxcard">
     <div class="label">FX</div>
-    <div class="grid2">
-      <div>
-        <div class="fxlabel"><span>Delay mix</span><span id="delayWetVal">15%</span></div>
-        <input type="range" id="delayWet" min="0" max="100" value="15">
-        <div class="fxlabel" style="margin-top:8px;"><span>Delay feedback</span><span id="delayFbVal">18%</span></div>
-        <input type="range" id="delayFb" min="0" max="90" value="18">
+    <div class="fxgrid">
+      <div class="fxgrp"><h4>DELAY</h4>
+        <div class="knob" data-for="delayWet"><input type="range" id="delayWet" min="0" max="100" value="15" hidden><div class="kl"><span>Mix</span><span id="delayWetVal">15%</span></div></div>
+        <div class="knob" data-for="delayFb"><input type="range" id="delayFb" min="0" max="90" value="18" hidden><div class="kl"><span>Feedback</span><span id="delayFbVal">18%</span></div></div>
       </div>
-      <div>
-        <div class="fxlabel"><span>Reverb mix</span><span id="reverbWetVal">12%</span></div>
-        <input type="range" id="reverbWet" min="0" max="100" value="12">
-        <div class="fxlabel" style="margin-top:8px;"><span>Reverb decay</span><span id="reverbDecayVal">1.6s</span></div>
-        <input type="range" id="reverbDecay" min="1" max="40" value="16">
+      <div class="fxgrp"><h4>REVERB</h4>
+        <div class="knob" data-for="reverbWet"><input type="range" id="reverbWet" min="0" max="100" value="12" hidden><div class="kl"><span>Mix</span><span id="reverbWetVal">12%</span></div></div>
+        <div class="knob" data-for="reverbDecay"><input type="range" id="reverbDecay" min="1" max="40" value="16" hidden><div class="kl"><span>Decay</span><span id="reverbDecayVal">1.6s</span></div></div>
+      </div>
+      <div class="fxgrp"><h4>FILTRO</h4>
+        <div class="knob" data-for="cutoff"><input type="range" id="cutoff" min="0" max="100" value="100" hidden><div class="kl"><span>Cutoff</span><span id="cutoffVal">18 kHz</span></div></div>
+        <div class="knob" data-for="reso"><input type="range" id="reso" min="0" max="100" value="0" hidden><div class="kl"><span>Reso</span><span id="resoVal">0%</span></div></div>
       </div>
     </div>
   </section>
@@ -306,6 +318,12 @@
     <button class="transportbtn" id="playBtn" aria-label="Play">&#9654;</button>
     <button class="transportbtn" id="stopBtn" aria-label="Stop">&#9632;</button>
     <div class="bpmfield">
+      <span>Durata</span>
+      <select id="durSel" style="width:auto;padding:6px 4px;">
+        <option value="1/16T">1/16T</option><option value="1/16">1/16</option><option value="1/8T">1/8T</option>
+        <option value="1/8" selected>1/8</option><option value="1/4T">1/4T</option><option value="1/4">1/4</option>
+        <option value="1/2">1/2</option>
+      </select>
       <span>BPM</span>
       <input type="number" id="bpmInput" value="120" min="40" max="240">
     </div>
@@ -530,6 +548,7 @@ let synth=null;
 let sampler=null;
 const reverb=new Tone.Reverb({decay:1.6,wet:0.12}).toDestination();
 const delay=new Tone.FeedbackDelay({delayTime:'8n',feedback:0.15,wet:0.08}).connect(reverb);
+const fxFilter=new Tone.Filter({type:'lowpass',rolloff:-24,frequency:18000,Q:0.7}).connect(delay);
 
 const sampleBuffers={};
 function loadSamplesFolder(){
@@ -567,28 +586,71 @@ async function ensureFolderSample(filename){
   }catch(decodeErr){
     throw new Error('formato WAV non supportato dal browser (riesporta come PCM 16-bit)');
   }
-  const player=new Tone.Player().connect(delay);
+  const player=new Tone.Player().connect(fxFilter);
   player.buffer=new Tone.ToneAudioBuffer(audioBuf);
   sampleBuffers[filename]=player;
   return player;
 }
 
+// Voce "Moog": oscillatore + (sub) -> filtro lowpass 24dB/oct con inviluppo -> saturazione -> volume
+function moogVoice(o){
+  const out=new Tone.Volume(o.vol||0);
+  const sat=new Tone.Distortion({distortion:o.sat||0,oversample:'2x',wet:o.sat?1:0});
+  const osc={type:o.osc};
+  if(o.osc.startsWith('fat')){osc.count=o.count||2;osc.spread=o.spread||12;}
+  if(o.osc==='pwm'){osc.modulationFrequency=0.7;}
+  const e=o.env,f=o.fenv;
+  const main=new Tone.MonoSynth({
+    oscillator:osc,
+    envelope:{attack:e[0],decay:e[1],sustain:e[2],release:e[3]},
+    filter:{type:'lowpass',rolloff:-24,Q:o.Q||2},
+    filterEnvelope:{attack:0.003,decay:f[2],sustain:f[3],release:0.2,baseFrequency:f[0],octaves:f[1],exponent:2}
+  });
+  main.connect(sat);
+  let sub=null;
+  if(o.sub!==undefined){
+    sub=new Tone.Synth({oscillator:{type:'triangle'},envelope:{attack:e[0],decay:e[1],sustain:e[2],release:e[3]},volume:o.sub});
+    sub.connect(sat);
+  }
+  sat.connect(out);
+  const hz=n=>Tone.Frequency(n).toFrequency();
+  const v={
+    frequency:{exponentialRampToValueAtTime(fr,t){main.frequency.exponentialRampToValueAtTime(fr,t);if(sub)sub.frequency.exponentialRampToValueAtTime(fr/2,t);}},
+    triggerAttack(n,t,vel){main.triggerAttack(hz(n),t,vel);if(sub)sub.triggerAttack(hz(n)/2,t,vel);},
+    triggerRelease(t){main.triggerRelease(t);if(sub)sub.triggerRelease(t);},
+    triggerAttackRelease(n,d,t,vel){main.triggerAttackRelease(hz(n),d,t,vel);if(sub)sub.triggerAttackRelease(hz(n)/2,d,t,vel);},
+    connect(d){out.connect(d);return v;},
+    dispose(){[main,sub,sat,out].forEach(x=>x&&x.dispose());}
+  };
+  return v;
+}
+
 function buildSynth(name){
   if(synth){synth.dispose();synth=null;}
+  // fenv = [frequenza base Hz, ottave di apertura, decay, sustain]  |  env = [A,D,S,R]
   const presets={
-    'Lead':()=>new Tone.Synth({oscillator:{type:'sawtooth'},envelope:{attack:0.01,decay:0.15,sustain:0.4,release:0.3}}),
-    'Pluck':()=>new Tone.Synth({oscillator:{type:'triangle'},envelope:{attack:0.001,decay:0.12,sustain:0,release:0.08}}),
-    'Bass':()=>new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:0.01,decay:0.2,sustain:0.6,release:0.2}}),
+    'Lead':()=>moogVoice({osc:'fatsawtooth',count:2,spread:10,Q:3,env:[0.01,0.2,0.5,0.3],fenv:[500,3.5,0.25,0.3],sat:0.08,vol:-3}),
+    'Pluck':()=>moogVoice({osc:'sawtooth',Q:4,env:[0.001,0.14,0,0.08],fenv:[250,3.5,0.1,0],vol:-3}),
+    'Bass':()=>moogVoice({osc:'triangle',sub:-4,Q:3,env:[0.01,0.2,0.7,0.2],fenv:[110,2.5,0.2,0.3],sat:0.1}),
     'Bell':()=>new Tone.FMSynth({harmonicity:3.5,modulationIndex:6,envelope:{attack:0.005,decay:0.8,sustain:0.1,release:0.6}}),
-    'Arp':()=>new Tone.Synth({oscillator:{type:'square'},envelope:{attack:0.005,decay:0.1,sustain:0.1,release:0.1}}),
-    'Square':()=>new Tone.Synth({oscillator:{type:'square'},envelope:{attack:0.01,decay:0.1,sustain:0.7,release:0.2}}),
-    'Saw':()=>new Tone.Synth({oscillator:{type:'sawtooth'},envelope:{attack:0.01,decay:0.1,sustain:0.7,release:0.25}}),
+    'Arp':()=>moogVoice({osc:'square',Q:3,env:[0.005,0.1,0.1,0.1],fenv:[400,3,0.1,0],vol:-4}),
+    'Square':()=>moogVoice({osc:'square',Q:2,env:[0.01,0.1,0.7,0.2],fenv:[600,2.5,0.2,0.5],vol:-5}),
+    'Saw':()=>moogVoice({osc:'fatsawtooth',count:3,spread:16,Q:2,env:[0.01,0.1,0.7,0.25],fenv:[700,3,0.3,0.5],vol:-4}),
     'Pluck 2':()=>new Tone.AMSynth({harmonicity:2,envelope:{attack:0.001,decay:0.15,sustain:0,release:0.1}}),
     'FM':()=>new Tone.FMSynth({harmonicity:1.5,modulationIndex:12,envelope:{attack:0.01,decay:0.2,sustain:0.3,release:0.2}}),
-    'Chip':()=>new Tone.Synth({oscillator:{type:'square'},envelope:{attack:0.001,decay:0.05,sustain:0.3,release:0.05}})
+    'Chip':()=>new Tone.Synth({oscillator:{type:'square'},envelope:{attack:0.001,decay:0.05,sustain:0.3,release:0.05}}),
+    // --- nuovi, stile Moog ---
+    'Moog Bass':()=>moogVoice({osc:'sawtooth',sub:-4,Q:6,env:[0.005,0.25,0.7,0.15],fenv:[80,3.2,0.18,0.1],sat:0.15,vol:-2}),
+    'Fat Bass':()=>moogVoice({osc:'fatsawtooth',count:3,spread:18,sub:-6,Q:2,env:[0.01,0.3,0.8,0.2],fenv:[100,3,0.3,0.25],sat:0.12,vol:-5}),
+    'Acid Squelch':()=>moogVoice({osc:'sawtooth',Q:14,env:[0.002,0.15,0.5,0.08],fenv:[120,4.5,0.12,0],sat:0.25,vol:-6}),
+    'Moog Lead':()=>moogVoice({osc:'fatsawtooth',count:2,spread:8,sub:-10,Q:4,env:[0.02,0.2,0.7,0.25],fenv:[400,3,0.35,0.5],sat:0.1,vol:-4}),
+    'Moog Pluck':()=>moogVoice({osc:'sawtooth',Q:5,env:[0.001,0.18,0,0.1],fenv:[200,4,0.1,0],sat:0.05,vol:-3}),
+    'Square Pulse':()=>moogVoice({osc:'pwm',Q:2,env:[0.01,0.15,0.6,0.2],fenv:[500,2.5,0.25,0.4],vol:-5}),
+    'Hard Lead':()=>moogVoice({osc:'fatsawtooth',count:3,spread:25,Q:8,env:[0.005,0.15,0.6,0.15],fenv:[600,3.5,0.15,0.3],sat:0.35,vol:-8}),
+    'Soft Key':()=>moogVoice({osc:'triangle',Q:1,env:[0.01,0.3,0.4,0.4],fenv:[800,1.5,0.4,0.5],vol:-2})
   };
   synth=(presets[name]||presets['Lead'])();
-  synth.connect(delay);
+  synth.connect(fxFilter);
 }
 buildSynth('Lead');
 
@@ -625,7 +687,7 @@ document.getElementById('sampleFile').addEventListener('change',(e)=>{
     url:url,
     onload:()=>{status.textContent='Caricato: '+file.name;status.style.color='var(--green)';},
     onerror:(err)=>{status.textContent='Errore caricando il file — formato non supportato';status.style.color='var(--red)';console.error('Errore caricamento sample',err);}
-  }).connect(delay);
+  }).connect(fxFilter);
   const opt=document.querySelector('#soundSel option[value="sample"]');
   opt.textContent=file.name.length>16?file.name.slice(0,14)+'...':file.name;
   opt.selected=true;
@@ -633,7 +695,14 @@ document.getElementById('sampleFile').addEventListener('change',(e)=>{
 
 let lastFreq=null;
 let prevPlayed=-1;
-new Tone.Sequence((time,i)=>{
+// Durata: 1 unita = 16 tick (PPQ 192). Il sequencer gira a questa risoluzione e fa partire lo step ogni N unita.
+const DURS={'1/16T':{u:2,n:'16t'},'1/16':{u:3,n:'16n'},'1/8T':{u:4,n:'8t'},'1/8':{u:6,n:'8n'},'1/4T':{u:8,n:'4t'},'1/4':{u:12,n:'4n'},'1/2':{u:24,n:'2n'}};
+let dur=DURS['1/8'];
+let clockTick=0,lastFire=-1e9;
+new Tone.Sequence((time,_i)=>{
+  clockTick++;
+  if(clockTick-lastFire<dur.u)return;
+  lastFire=clockTick;
   const idx=nextStepIndex(prevPlayed<0?-1:prevPlayed);
   prevPlayed=idx;
   if(!state.onoff[idx])return;
@@ -652,14 +721,14 @@ new Tone.Sequence((time,i)=>{
     if(slideMs>0&&lastFreq){
       synth.triggerAttack(lastFreq,time,velNorm);
       synth.frequency.exponentialRampToValueAtTime(Tone.Frequency(freq).toFrequency(),time+slideMs/1000);
-      synth.triggerRelease(time+0.15);
+      synth.triggerRelease(time+Tone.Time(dur.n).toSeconds()*0.9);
     }else{
-      synth.triggerAttackRelease(freq,'8n',time,velNorm);
+      synth.triggerAttackRelease(freq,dur.n,time,velNorm);
     }
     lastFreq=Tone.Frequency(freq).toFrequency();
   }
   Tone.Draw.schedule(()=>{flashPitch(idx);},time);
-},[0,1,2,3,4,5,6,7],'8n').start(0);
+},[0],'16i').start(0);
 
 let playing=false;
 document.getElementById('playBtn').addEventListener('click',async ()=>{
@@ -672,9 +741,13 @@ document.getElementById('playBtn').addEventListener('click',async ()=>{
 document.getElementById('stopBtn').addEventListener('click',()=>{
   playing=false;
   Tone.Transport.stop();
-  prevPlayed=-1;pingpongPos=0;pingpongDir=1;
+  prevPlayed=-1;pingpongPos=0;pingpongDir=1;clockTick=0;lastFire=-1e9;
   const btn=document.getElementById('playBtn');
   btn.classList.remove('playing');btn.innerHTML='&#9654;';
+});
+document.getElementById('durSel').addEventListener('change',(e)=>{
+  dur=DURS[e.target.value]||DURS['1/8'];
+  lastFire=Math.min(lastFire,clockTick);
 });
 document.getElementById('bpmInput').addEventListener('input',(e)=>{
   const v=Math.max(40,Math.min(240,parseInt(e.target.value)||120));
@@ -707,6 +780,47 @@ document.getElementById('reverbDecay').addEventListener('input',(e)=>{
   document.getElementById('reverbDecayVal').textContent=v.toFixed(1)+'s';
 });
 
+const cutHz=v=>80*Math.pow(18000/80,v/100);
+document.getElementById('cutoff').addEventListener('input',(e)=>{
+  const f=cutHz(parseInt(e.target.value));
+  fxFilter.frequency.rampTo(f,0.03);
+  document.getElementById('cutoffVal').textContent=f>=1000?(f/1000).toFixed(f>=10000?0:1)+' kHz':Math.round(f)+' Hz';
+});
+document.getElementById('reso').addEventListener('input',(e)=>{
+  const v=parseInt(e.target.value);
+  fxFilter.Q.value=0.7+v/100*13;
+  document.getElementById('resoVal').textContent=v+'%';
+});
+
+// Knob: trascinamento verticale, doppio tocco = valore predefinito
+function polar(a,r){const t=(a-90)*Math.PI/180;return [32+r*Math.cos(t),32+r*Math.sin(t)];}
+function arc(a0,a1,r){const [x0,y0]=polar(a0,r),[x1,y1]=polar(a1,r);return 'M'+x0.toFixed(2)+' '+y0.toFixed(2)+' A'+r+' '+r+' 0 '+((a1-a0)>180?1:0)+' 1 '+x1.toFixed(2)+' '+y1.toFixed(2);}
+function initKnob(k){
+  const inp=document.getElementById(k.dataset.for);
+  const min=+inp.min,max=+inp.max;
+  k.insertAdjacentHTML('afterbegin','<svg viewBox="0 0 64 64"><path d="'+arc(-135,135,27)+'" fill="none" stroke="var(--panel2)" stroke-width="5" stroke-linecap="round"/><path class="kv" fill="none" stroke="var(--green)" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="32" r="19" fill="var(--panel2)" stroke="var(--text-dim)" stroke-width="1"/><line class="kp" x1="32" y1="32" x2="32" y2="17" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/></svg>');
+  const kv=k.querySelector('.kv'),kp=k.querySelector('.kp');
+  const draw=()=>{
+    const a=-135+270*((+inp.value-min)/(max-min));
+    kv.setAttribute('d',a>-134?arc(-135,a,27):'');
+    kp.setAttribute('transform','rotate('+a+' 32 32)');
+  };
+  k._draw=draw;draw();
+  const setV=v=>{v=Math.round(Math.max(min,Math.min(max,v)));if(v!==+inp.value){inp.value=v;inp.dispatchEvent(new Event('input'));draw();}};
+  let y0=null,v0=0,lastUp=0;
+  k.addEventListener('pointerdown',e=>{k.setPointerCapture(e.pointerId);y0=e.clientY;v0=+inp.value;e.preventDefault();});
+  k.addEventListener('pointermove',e=>{if(y0===null)return;setV(v0+(y0-e.clientY)/160*(max-min));});
+  const end=()=>{
+    if(y0===null)return;y0=null;
+    const now=Date.now();
+    if(now-lastUp<300){setV(+inp.defaultValue);}
+    lastUp=now;
+  };
+  k.addEventListener('pointerup',end);k.addEventListener('pointercancel',()=>{y0=null;});
+}
+function syncKnobs(){document.querySelectorAll('.knob').forEach(k=>k._draw&&k._draw());}
+document.querySelectorAll('.knob').forEach(initKnob);
+
 const SESS_KEY='s33-sessions';
 function loadSessionList(){
   const sel=document.getElementById('sessionSel');
@@ -733,11 +847,14 @@ document.getElementById('saveSession').addEventListener('click',()=>{
     scale:document.getElementById('genSel').value,
     sound:document.getElementById('soundSel').value==='sample'?'Lead':document.getElementById('soundSel').value,
     bpm:parseInt(document.getElementById('bpmInput').value),
+    dur:document.getElementById('durSel').value,
     regen:document.getElementById('regenSel').value,
     delayWet:parseInt(document.getElementById('delayWet').value),
     delayFb:parseInt(document.getElementById('delayFb').value),
     reverbWet:parseInt(document.getElementById('reverbWet').value),
-    reverbDecay:parseInt(document.getElementById('reverbDecay').value)
+    reverbDecay:parseInt(document.getElementById('reverbDecay').value),
+    cutoff:parseInt(document.getElementById('cutoff').value),
+    reso:parseInt(document.getElementById('reso').value)
   };
   const existingIdx=sessions.findIndex(s=>s.name===name);
   if(existingIdx>=0)sessions[existingIdx]=snapshot;else sessions.push(snapshot);
@@ -769,6 +886,8 @@ document.getElementById('loadSession').addEventListener('click',()=>{
     buildSynth(s.sound);
   }
   document.getElementById('bpmInput').value=s.bpm;
+  document.getElementById('durSel').value=s.dur||'1/8';
+  document.getElementById('durSel').dispatchEvent(new Event('change'));
   Tone.Transport.bpm.value=s.bpm;
   document.getElementById('regenSel').value=s.regen;
   document.getElementById('regenSel').dispatchEvent(new Event('change'));
@@ -782,6 +901,8 @@ document.getElementById('loadSession').addEventListener('click',()=>{
   document.getElementById('reverbDecay').value=s.reverbDecay;
   reverb.decay=s.reverbDecay/10;reverb.generate();
   document.getElementById('reverbDecayVal').textContent=(s.reverbDecay/10).toFixed(1)+'s';
+  [['cutoff',s.cutoff,100],['reso',s.reso,0]].forEach(([id,v,d])=>{const i=document.getElementById(id);i.value=(v===undefined?d:v);i.dispatchEvent(new Event('input'));});
+  syncKnobs();
 });
 
 document.getElementById('deleteSession').addEventListener('click',()=>{
